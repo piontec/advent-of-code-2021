@@ -1,3 +1,4 @@
+import time
 from typing import Tuple, List
 
 import numpy as np
@@ -26,37 +27,41 @@ def get_neighbor_nodes(p: Point, shape: Tuple[int, int]) -> List[Point]:
 
 
 def get_path(arr: np.ndarray, start: Point, end: Point) -> int:
-    visited = np.full(arr.shape, False, dtype=bool)
-    parents: dict[Point, Point] = {}
+    visited: set[Point] = set()
+    unvisited: set[Point] = set()
     max_value = np.iinfo(np.int32).max
     distance = np.full(arr.shape, max_value, dtype=np.int32)
     distance[start] = 0
     current = start
     max_x = 0
+    start_time = time.perf_counter()
     while True:
         for neighbor in get_neighbor_nodes(current, arr.shape):
-            if visited[neighbor]:
+            if neighbor in visited:
                 continue
             dist = distance[current] + arr[neighbor]
-            if distance[neighbor] == -1 or dist < distance[neighbor]:
+            if distance[neighbor] == max_value or dist < distance[neighbor]:
                 distance[neighbor] = dist
-                parents[neighbor] = current
-        visited[current] = True
+            unvisited.add(neighbor)
+        visited.add(current)
+        unvisited.discard(current)
         if current == end:
             break
         min_unvisited_val = max_value
         min_unvisited_index = (-1, -1)
-        for y in range(arr.shape[1]):
-            for x in range(arr.shape[0]):
-                if visited[y, x]:
-                    continue
-                if distance[y, x] < min_unvisited_val:
-                    min_unvisited_val = distance[y, x]
-                    min_unvisited_index = (y, x)
+
+        for uv in unvisited:
+            if distance[uv] < min_unvisited_val:
+                min_unvisited_val = distance[uv]
+                min_unvisited_index = uv
         current = min_unvisited_index
+
+        # debug only
         if current[1] > max_x:
             max_x = current[1]
-            print(max_x)
+            tt_now = time.perf_counter()
+            print(f"{max_x} in {tt_now - start_time}")
+            start_time = tt_now
     return distance[end]
 
 
