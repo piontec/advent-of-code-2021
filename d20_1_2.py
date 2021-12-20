@@ -26,7 +26,7 @@ def get_pixel(py: int, px: int, img: dict[Coord, bool], lookup: str, def_val: bo
     return lookup[val] == "#"
 
 
-def run(lines: list[str], steps: int = 2) -> int:
+def run(lines: list[str], steps: int = 50) -> int:
     lookup = lines[0].strip()
     img: dict[Coord, bool] = {}
     y = 0
@@ -54,7 +54,8 @@ def run(lines: list[str], steps: int = 2) -> int:
                 else:
                     new_img[(y, x)] = False
         img = new_img
-        print_image(img)
+        print(f"step: {i}")
+        # print_image(img)
         if def_val:
             def_val_index = -1
         else:
@@ -84,7 +85,7 @@ def test() -> None:
 ..#..
 ..###"""
     val = run(txt.splitlines())
-    assert val == 35
+    assert val == 3351
 
 
 if __name__ == "__main__":
