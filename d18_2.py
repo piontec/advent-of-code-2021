@@ -131,22 +131,19 @@ def get_magnitude(red_res: str) -> int:
 
 
 def run(lines: list[str]) -> int:
-    red_res = reduce(lines)
-    magnitude = get_magnitude(red_res)
-    return magnitude
+    max_mag = 0
+    for l1 in lines:
+        for l2 in lines:
+            if l1 == l2:
+                continue
+            red = reduce_pair(l1.strip(), l2.strip())
+            magnitude = get_magnitude(red)
+            if magnitude > max_mag:
+                max_mag = magnitude
+    return max_mag
 
 
 def test() -> None:
-    res = reduce_one("[[[[[9,8],1],2],3],4]")
-    assert res == "[[[[0,9],2],3],4]"
-    res = reduce_one("[7,[6,[5,[4,[3,2]]]]]")
-    assert res == "[7,[6,[5,[7,0]]]]"
-    res = reduce_one("[[6,[5,[4,[3,2]]]],1]")
-    assert res == "[[6,[5,[7,0]]],3]"
-    res = reduce_one("[[[[[4,3],4],4],[7,[[8,4],9]]],[1,1]]")
-    assert res == "[[[[0,7],4],[[7,8],[6,0]]],[8,1]]"
-    res = get_magnitude("[[1,2],[[3,4],5]]")
-    assert res == 143
     txt = """[[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
 [[[5,[2,8]],4],[5,[[9,9],0]]]
 [6,[[[6,2],[5,6]],[[7,6],[4,7]]]]
@@ -157,10 +154,8 @@ def test() -> None:
 [[9,3],[[9,9],[6,[4,9]]]]
 [[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]]
 [[[[5,2],5],[8,[3,7]]],[[5,[7,5]],[4,4]]]"""
-    red_res = reduce(txt.splitlines())
-    assert red_res == "[[[[6,6],[7,6]],[[7,7],[7,0]]],[[[7,7],[7,7]],[[7,8],[9,9]]]]"
-    magnitude = get_magnitude(red_res)
-    assert magnitude == 4140
+    magnitude = run(txt.splitlines())
+    assert magnitude == 3993
 
 
 if __name__ == "__main__":
