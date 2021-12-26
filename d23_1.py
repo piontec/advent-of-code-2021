@@ -28,7 +28,6 @@ class Burrow:
     # tuple of (room_name, room_index
     solved: list[Tuple[str, int]]
     cost: int
-    history: list['Burrow']
 
     def __init__(self, corridor: Optional[list[str]], rooms: Rooms):
         if not corridor:
@@ -39,7 +38,6 @@ class Burrow:
         self.solved = []
         self.update_solved()
         self.cost = 0
-        self.history = []
 
     def __eq__(self, other):
         if type(other) is not Burrow:
@@ -160,11 +158,8 @@ def run(lines: list[str]) -> int:
             continue
         from_corridor = burrow.get_all_moves_from_corridor()
         from_rooms = burrow.get_all_moves_from_rooms()
-        for b in from_corridor + from_rooms:
-            if b in b.history:
-                continue
+        for b in from_rooms + from_corridor:
             b.update_solved()
-            b.history.append(burrow)
             to_check.append(b)
     return best_solution_cost
 
