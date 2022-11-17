@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 numpy = "*"
 bitarray = "*"
+snakeviz = "*"
 
 [dev-packages]
 

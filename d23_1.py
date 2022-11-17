@@ -39,6 +39,11 @@ class Burrow:
         self.update_solved()
         self.cost = 0
 
+    def copy(self) -> 'Burrow':
+        res = Burrow(self.corridor.copy(),
+                     Rooms(self.rooms.a.copy(), self.rooms.b.copy(), self.rooms.c.copy(), self.rooms.d.copy()))
+        return res
+
     def __eq__(self, other):
         if type(other) is not Burrow:
             raise ValueError("wrong type")
