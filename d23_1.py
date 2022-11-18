@@ -1,11 +1,13 @@
-from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import cache
 from typing import Optional, Tuple
 
 
 @dataclass
 class Rooms:
+    # a[0] - upper room, connecting to corridor
+    # a[1] - lower room
     a: list[str]
     b: list[str]
     c: list[str]
@@ -16,9 +18,14 @@ class Rooms:
             raise ValueError("wrong type")
         return self.a == other.a and self.b == other.b and self.c == other.c and self.d == other.d
 
+    def __hash__(self):
+        return hash(self.a[0]) + hash(self.a[1]) + hash(self.b[0]) + hash(self.b[1]) + hash(self.c[0])\
+               + hash(self.c[1]) + hash(self.d[0]) + hash(self.d[1])
+
 
 rooms_to_corridor_index = {"a": 2, "b": 4, "c": 6, "d": 8}
 step_cost = {"a": 1, "b": 10, "c": 100, "d": 1000}
+best_so_far = -1
 
 
 @dataclass
@@ -49,6 +56,9 @@ class Burrow:
             raise ValueError("wrong type")
         return self.corridor == other.corridor and self.rooms == other.rooms
 
+    def __hash__(self):
+        return hash(self.rooms) + hash(tuple(self.corridor)) + self.cost
+
     def __str__(self):
         print("#" * 13)
         print("#" + "".join(self.corridor) + "#")
@@ -57,6 +67,7 @@ class Burrow:
         print("  " + "#" * 9)
 
     def update_solved(self) -> None:
+        self.solved = []
         for name in ["a", "b", "c", "d"]:
             if getattr(self.rooms, name)[1] == name:
                 info = (name, 1)
@@ -71,64 +82,92 @@ class Burrow:
     def all_solved(self) -> bool:
         return len(self.solved) == 8
 
-    def get_all_moves_from_corridor(self) -> list['Burrow']:
-        res: dict[str, list[Burrow]] = {"a": [], "b": [], "c": [], "d": []}
-        for i in range(len(self.corridor)):
-            if self.corridor[i] == ".":
-                continue
-            amp = self.corridor[i]
-            room = getattr(self.rooms, amp)
-            # if we can't enter our room
-            if not (room[1] == "." or (room[0] == "." and room[1] == amp)):
-                continue
-            room_index = 1 if room[1] == "." else 0
-            steps = abs(rooms_to_corridor_index[amp] - i) + room_index + 1
 
-            new_bur = deepcopy(self)
-            new_bur.corridor[i] = "."
-            getattr(new_bur.rooms, amp)[room_index] = amp
-            new_bur.cost += steps * step_cost[amp]
-            res[amp].append(new_bur)
-        return res["d"] + res["c"] + res["b"] + res["a"]
+@cache
+def get_all_moves_from_corridor(burrow: Burrow) -> list[Burrow]:
+    res: list[Burrow] = []
+    for i in range(len(burrow.corridor)):
+        if burrow.corridor[i] == ".":
+            continue
+        amp = burrow.corridor[i]
+        if amp not in ["a", "b", "c", "d"]:
+            raise ValueError(f"impossible: {amp}")
+        room = getattr(burrow.rooms, amp)
+        # if we can't enter our room
+        if not (room[1] == "." or (room[0] == "." and room[1] == amp)):
+            continue
+        room_index = 1 if room[1] == "." else 0
 
-    def get_all_moves_from_rooms(self) -> list['Burrow']:
-        res: dict[str, list[Burrow]] = {"a": [], "b": [], "c": [], "d": []}
-        for room_name in ["a", "b", "c", "d"]:
-            for room_index in range(2):
-                room = getattr(self.rooms, room_name)
-                # already solved
-                if (room_name, room_index) in self.solved:
+        new_bur = deepcopy(burrow)
+        new_bur.corridor[i] = "."
+        getattr(new_bur.rooms, amp)[room_index] = amp
+        steps = abs(rooms_to_corridor_index[amp] - i) + room_index + 1
+        new_bur.cost += steps * step_cost[amp]
+        res.append(new_bur)
+    return res
+
+
+@cache
+def get_all_moves_from_rooms(burrow: Burrow) -> list[Burrow]:
+    res: list[Burrow] = []
+    for room_name in ["a", "b", "c", "d"]:
+        for room_index in range(2):
+            room = getattr(burrow.rooms, room_name)
+            # already solved
+            if (room_name, room_index) in burrow.solved:
+                continue
+            # not an amp
+            if room[room_index] == ".":
+                continue
+            # blocked by amp at index 0 - can't leave
+            if room_index == 1 and room[0] != ".":
+                continue
+            amp = room[room_index]
+            possible_corridor_indexes = []
+            # go left
+            for ci in range(rooms_to_corridor_index[room_name] - 1, -1, -1):
+                if burrow.corridor[ci] != ".":
+                    break
+                if ci in rooms_to_corridor_index.values():
                     continue
-                # not an amp
-                if room[room_index] == ".":
+                possible_corridor_indexes.append(ci)
+            # go right
+            for ci in range(rooms_to_corridor_index[room_name] + 1, len(burrow.corridor)):
+                if burrow.corridor[ci] != ".":
+                    break
+                if ci in rooms_to_corridor_index.values():
                     continue
-                # blocked by amp at index 0 - can't leave
-                if room_index == 1 and room[0] != ".":
-                    continue
-                amp = room[room_index]
-                possible_corridor_indexes = []
-                # go right
-                for ci in range(rooms_to_corridor_index[room_name] + 1, len(self.corridor)):
-                    if self.corridor[ci] != ".":
-                        break
-                    if ci in rooms_to_corridor_index.values():
-                        continue
-                    possible_corridor_indexes.append(ci)
-                # go left
-                for ci in range(rooms_to_corridor_index[room_name] - 1, -1, -1):
-                    if self.corridor[ci] != ".":
-                        break
-                    if ci in rooms_to_corridor_index.values():
-                        continue
-                    possible_corridor_indexes.append(ci)
-                for ci in possible_corridor_indexes:
-                    new_bur = deepcopy(self)
-                    new_bur.corridor[ci] = amp
-                    getattr(new_bur.rooms, room_name)[room_index] = "."
-                    steps = abs(rooms_to_corridor_index[room_name] - ci) + room_index + 1
-                    new_bur.cost += steps * step_cost[amp]
-                    res[amp].append(new_bur)
-        return res["d"] + res["c"] + res["b"] + res["a"]
+                possible_corridor_indexes.append(ci)
+            for ci in possible_corridor_indexes:
+                new_bur = deepcopy(burrow)
+                new_bur.corridor[ci] = amp
+                getattr(new_bur.rooms, room_name)[room_index] = "."
+                steps = abs(rooms_to_corridor_index[room_name] - ci) + room_index + 1
+                new_bur.cost += steps * step_cost[amp]
+                res.append(new_bur)
+    return res
+
+
+@cache
+def find_best_cost(step: int, burrow: Burrow) -> int:
+    global best_so_far
+    if burrow.cost > best_so_far > 0:
+        return -1
+
+    burrow.update_solved()
+    if burrow.all_solved:
+        return burrow.cost
+
+    from_corridor = get_all_moves_from_corridor(burrow)
+    from_rooms = get_all_moves_from_rooms(burrow)
+
+    for b in from_rooms + from_corridor:
+        current_cost = find_best_cost(step + 1, b)
+        if current_cost == -1:
+            continue
+        if current_cost < best_so_far or best_so_far == -1:
+            best_so_far = current_cost
+    return best_so_far
 
 
 def main() -> None:
@@ -145,28 +184,7 @@ def run(lines: list[str]) -> int:
                   [row0[5].lower(), row1[3].lower()], [row0[6].lower(), row1[4].lower()])
     burrow = Burrow(None, rooms)
 
-    best_solution: Optional[Burrow] = None
-    best_solution_cost = -1
-    to_check = deque([burrow])
-
-    while len(to_check) > 0:
-        burrow = to_check.pop()
-        # check if we have new best solution
-        if burrow.all_solved:
-            if best_solution_cost == -1 or burrow.cost < best_solution_cost:
-                best_solution_cost = burrow.cost
-                best_solution = burrow
-                print(f"new best: {best_solution_cost}")
-            continue
-        # check if we're already worse than the best solution so far
-        if -1 < best_solution_cost < burrow.cost:
-            continue
-        from_corridor = burrow.get_all_moves_from_corridor()
-        from_rooms = burrow.get_all_moves_from_rooms()
-        for b in from_rooms + from_corridor:
-            b.update_solved()
-            to_check.append(b)
-    return best_solution_cost
+    return find_best_cost(1, burrow)
 
 
 def test() -> None:

@@ -1,86 +1,90 @@
-from typing import TypedDict
+from typing import List
 
 
-class Regs(TypedDict):
-    w: int
-    x: int
-    y: int
-    z: int
+class ALU:
+    def __init__(self, code_lines: List[str], inputs: List[int]):
+        self._ip: int = 0
+        self._input_index = 0
+        self._code_lines = code_lines
+        self._inputs = inputs
+        self._regs = {
+            "w": 0,
+            "x": 0,
+            "y": 0,
+            "z": 0,
+        }
 
+    def _run_instruction(self) -> None:
+        instruction = self._code_lines[self._ip].strip('\n')
+        self._ip += 1
+        us = instruction.split(" ")
+        op = us[0]
+        args = us[1:]
+        if op == "inp":
+            self._regs[args[0]] = self._inputs[self._input_index]
+            self._input_index += 1
+        else:
+            val = self._regs[args[1]] if args[1] in self._regs.keys() else int(args[1])
+            if op == "add":
+                self._regs[args[0]] += val
+            elif op == "mul":
+                self._regs[args[0]] *= val
+            elif op == "div":
+                if val == 0:
+                    raise ZeroDivisionError()
+                self._regs[args[0]] //= val
+            elif op == "mod":
+                if val <= 0:
+                    raise ValueError(f"wrong b arg of mod: {val}")
+                if self._regs[args[0]] < 0:
+                    raise ValueError(f"wrong a arg of mod: {val}")
+                self._regs[args[0]] %= val
+            elif op == "eql":
+                self._regs[args[0]] = int(self._regs[args[0]] == val)
+            else:
+                raise ValueError(f"Wrong op: {op}")
 
-class Alu:
-    def __init__(self, inp: list[int]):
-        self.inp = inp
-        self.regs: Regs = {"w": 0, "x": 0, "y": 0, "z": 0}
-        self._inp_pointer = 0
-
-    def _arg_val(self, arg: str) -> int:
-        if arg in ["w", "x", "y", "z"]:
-            return self.regs[arg]
-        return int(arg)
-
-    def run_instr(self, instr: str) -> bool:
-        op, args = instr.split(" ", maxsplit=1)
-        r1 = args[0]
-        if r1 not in ["w", "x", "y", "z"]:
-            raise Exception("bad arg[0]")
-        match op:
-            case "inp":
-                self.regs[r1] = self.inp[self._inp_pointer]
-                self._inp_pointer += 1
-            case "add":
-                r2 = args.split(" ")[1]
-                self.regs[r1] = self.regs[r1] + self._arg_val(r2)
-            case "mul":
-                r2 = args.split(" ")[1]
-                self.regs[r1] = self.regs[r1] * self._arg_val(r2)
-            case "div":
-                r2 = args.split(" ")[1]
-                av = self._arg_val(r2)
-                if av == 0:
-                    self.regs["z"] = 1
-                    return False
-                self.regs[r1] = self.regs[r1] // av
-            case "mod":
-                r2 = args.split(" ")[1]
-                if self.regs[r1] < 0:
-                    self.regs["z"] = 2
-                    return False
-                av = self._arg_val(r2)
-                if av <= 0:
-                    self.regs["z"] = 3
-                    return False
-                self.regs[r1] = self.regs[r1] % av
-            case "eql":
-                r2 = args.split(" ")[1]
-                self.regs[r1] = 1 if self.regs[r1] == self._arg_val(r2) else 0
-            case _:
-                raise Exception("unknown op")
-        return True
-
-
-def run(lines: list[str], inp: list[int]) -> int:
-    alu = Alu(inp)
-    for line in lines:
-        if not alu.run_instr(line.strip()):
-            break
-    return alu.regs["z"]
+    def run(self) -> None:
+        while self._ip < len(self._code_lines):
+            self._run_instruction()
 
 
 def main() -> None:
-    with open("i24.txt", "r") as i:
-        lines = i.readlines()
-    # inp = [1, 3, 5, 7, 9, 2, 4, 6, 8, 9, 9, 9, 9, 9]
-    inp = [1, 9, 1, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]
-    res = run(lines, inp)
+    with open("i24.txt") as f:
+        lines = f.readlines()
+    low = 11111111111111
+    high = 99999999999999
+    res = 0
+    while True:
+        mid = low + (high - low) // 2
+        while "0" in str(mid):
+            mid += 1
+        if low >= mid:
+            res = high
+            break
+        if mid >= high:
+            res = low
+            break
+        inputs = [int(c) for c in str(mid)]
+        alu = ALU(lines, inputs)
+        alu.run()
+        if alu._regs["z"] == 0:
+            low = mid
+        else:
+            high = mid
     print(res)
 
 
 def test() -> None:
-    txt = ""
-    assert run(txt.splitlines()) == 590784
+    code = """inp z
+inp x
+mul z 3
+eql z x""".splitlines()
+    alu = ALU(code, [1, 3])
+    alu.run()
+    assert alu._regs["z"] == 1
 
 
 if __name__ == "__main__":
-    # test()
+    test()
     main()
