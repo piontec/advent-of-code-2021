@@ -1,5 +1,4 @@
-import math
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Callable
 
 from multiset import Multiset
 
@@ -50,10 +49,60 @@ class Scanner:
                     break
         return res
 
+    def transform_beacons(self, transform_fun: Callable[[Pos], Pos]) -> 'Scanner':
+        res = Scanner(self.sid)
+        for b in self.beacons:
+            res.beacons.append(transform_fun(b))
+        return res
+
+    def get_all_rotations_for_x_axis(self) -> list['Scanner']:
+        res = [self]
+        next_scanner = self
+        for _ in range(3):
+            rotated_scanner = next_scanner.transform_beacons(lambda b: Pos(b.x, -b.z, b.y))
+            res.append(rotated_scanner)
+            next_scanner = rotated_scanner
+        return res
+
+    def switch_x_y_axis(self) -> 'Scanner':
+        return self.transform_beacons(lambda b: Pos(b.y, b.x, b.z))
+
+    def switch_x_z_axis(self) -> 'Scanner':
+        return self.transform_beacons(lambda b: Pos(b.z, b.y, b.x))
+
+    def revert_along_x_axis(self) -> 'Scanner':
+        return self.transform_beacons(lambda b: Pos(-b.x, b.y, b.z))
+
+    def move(self, dx: int, dy: int, dz: int) -> 'Scanner':
+        return self.transform_beacons(lambda b: Pos(b.x + dx, b.y + dy, b.z + dz))
+
+    def get_rotations(self) -> list['Scanner']:
+        xy_switch = self.switch_x_y_axis()
+        xz_switch = self.switch_x_z_axis()
+        to_rotate = [self, self.revert_along_x_axis(), xy_switch, xy_switch.revert_along_x_axis(), xz_switch,
+                     xz_switch.revert_along_x_axis()]
+        res: list[Scanner] = []
+        for s in to_rotate:
+            res.extend(s.get_all_rotations_for_x_axis())
+        assert len(res) == 24
+        return res
+
+    def matches(self, other: 'Scanner', min_match: int = 12) -> 'Scanner':
+        for o in other.get_rotations():
+            for src_bid in self.beacon_dists.keys():
+                for dst_bid in o.beacon_dists.keys():
+                    common_dists = self.beacon_dists[src_bid].intersection(o.beacon_dists[dst_bid])
+                    if len(common_dists) >= min_match - 1:
+                        dx = self.beacons[src_bid].x - o.beacons[dst_bid].x
+                        dy = self.beacons[src_bid].y - o.beacons[dst_bid].y
+                        dz = self.beacons[src_bid].z - o.beacons[dst_bid].z
+                        moved = o.move(dx, dy, dz)
+                        matching_beacons = set(self.beacons).intersection(set(moved.beacons))
+                        if len(matching_beacons) >= min_match:
+                            return moved
 
 
-
-def run(lines: list[str]) -> None:
+def run(lines: list[str]) -> int:
     sid = 0
     scanner: Optional[Scanner] = None
     scanners: list[Scanner] = []
@@ -76,9 +125,20 @@ def run(lines: list[str]) -> None:
         scanner.compute_distances()
     while len(unmatched) > 0:
         for ms in matched:
+            found_any = False
             candidates = ms.find_candidates(unmatched)
-
-
+            for c in candidates:
+                c_matched = ms.matches(c)
+                if c_matched:
+                    matched.add(c_matched)
+                    unmatched.remove(c)
+                    found_any = True
+            if not found_any:
+                raise Exception('None of the candidates were matched')
+    res: set[Pos] = set()
+    for s in matched:
+        res.update(s.beacons)
+    return len(res)
 
 
 def main() -> None:
