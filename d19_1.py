@@ -53,39 +53,46 @@ class Scanner:
         res = Scanner(self.sid)
         for b in self.beacons:
             res.beacons.append(transform_fun(b))
+        res.beacon_dists = self.beacon_dists
         return res
 
-    def get_all_rotations_for_x_axis(self) -> list['Scanner']:
-        res = [self]
-        next_scanner = self
-        for _ in range(3):
-            rotated_scanner = next_scanner.transform_beacons(lambda b: Pos(b.x, -b.z, b.y))
-            res.append(rotated_scanner)
-            next_scanner = rotated_scanner
+    def get_rotations(self) -> list['Scanner']:
+        rots = [
+            lambda b: Pos(b.x, b.y, b.z),
+            lambda b: Pos(b.x, -b.z, b.y),
+            lambda b: Pos(b.x, -b.y, -b.z),
+            lambda b: Pos(b.x, b.z, -b.y),
+
+            lambda b: Pos(-b.y, b.x, b.z),
+            lambda b: Pos(b.z, b.x, b.y),
+            lambda b: Pos(b.y, b.x, -b.z),
+            lambda b: Pos(-b.z, b.x, -b.y),
+
+            lambda b: Pos(-b.x, -b.y, b.z),
+            lambda b: Pos(-b.x, -b.z, -b.y),
+            lambda b: Pos(-b.x, b.y, -b.z),
+            lambda b: Pos(-b.x, b.z, b.y),
+
+            lambda b: Pos(b.y, -b.x, b.z),
+            lambda b: Pos(b.z, -b.x, -b.y),
+            lambda b: Pos(-b.y, -b.x, -b.z),
+            lambda b: Pos(-b.z, -b.x, b.y),
+
+            lambda b: Pos(-b.z, b.y, b.x),
+            lambda b: Pos(b.y, b.z, b.x),
+            lambda b: Pos(b.z, -b.y, b.x),
+            lambda b: Pos(-b.y, -b.z, b.x),
+
+            lambda b: Pos(-b.z, -b.y, -b.x),
+            lambda b: Pos(-b.y, b.z, -b.x),
+            lambda b: Pos(b.z, b.y, -b.x),
+            lambda b: Pos(b.y, -b.z, -b.x),
+        ]
+        res = [self.transform_beacons(r) for r in rots]
         return res
-
-    def switch_x_y_axis(self) -> 'Scanner':
-        return self.transform_beacons(lambda b: Pos(b.y, b.x, b.z))
-
-    def switch_x_z_axis(self) -> 'Scanner':
-        return self.transform_beacons(lambda b: Pos(b.z, b.y, b.x))
-
-    def revert_along_x_axis(self) -> 'Scanner':
-        return self.transform_beacons(lambda b: Pos(-b.x, b.y, b.z))
 
     def move(self, dx: int, dy: int, dz: int) -> 'Scanner':
         return self.transform_beacons(lambda b: Pos(b.x + dx, b.y + dy, b.z + dz))
-
-    def get_rotations(self) -> list['Scanner']:
-        xy_switch = self.switch_x_y_axis()
-        xz_switch = self.switch_x_z_axis()
-        to_rotate = [self, self.revert_along_x_axis(), xy_switch, xy_switch.revert_along_x_axis(), xz_switch,
-                     xz_switch.revert_along_x_axis()]
-        res: list[Scanner] = []
-        for s in to_rotate:
-            res.extend(s.get_all_rotations_for_x_axis())
-        assert len(res) == 24
-        return res
 
     def matches(self, other: 'Scanner', min_match: int = 12) -> 'Scanner':
         for o in other.get_rotations():
@@ -99,6 +106,7 @@ class Scanner:
                         moved = o.move(dx, dy, dz)
                         matching_beacons = set(self.beacons).intersection(set(moved.beacons))
                         if len(matching_beacons) >= min_match:
+                            moved.pos = Pos(dx, dy, dz)
                             return moved
 
 
@@ -124,8 +132,8 @@ def run(lines: list[str]) -> int:
     for scanner in scanners:
         scanner.compute_distances()
     while len(unmatched) > 0:
+        found_any = False
         for ms in matched:
-            found_any = False
             candidates = ms.find_candidates(unmatched)
             for c in candidates:
                 c_matched = ms.matches(c)
@@ -133,8 +141,11 @@ def run(lines: list[str]) -> int:
                     matched.add(c_matched)
                     unmatched.remove(c)
                     found_any = True
-            if not found_any:
-                raise Exception('None of the candidates were matched')
+                    break
+            if found_any:
+                break
+        if not found_any:
+            raise Exception('None of the candidates were matched')
     res: set[Pos] = set()
     for s in matched:
         res.update(s.beacons)
@@ -319,7 +330,7 @@ def test() -> None:
 -652,-548,-490
 30,-46,-14""".splitlines()
     res = run(lines)
-    print(res)
+    assert res == 79
 
 
 if __name__ == "__main__":
