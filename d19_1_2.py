@@ -23,6 +23,9 @@ class Scanner:
     def __repr__(self) -> str:
         return self.__str__()
 
+    def distance_to_scanner(self, o: 'Scanner') -> int:
+        return abs(self.pos.x - o.pos.x) + abs(self.pos.y - o.pos.y) + abs(self.pos.z - o.pos.z)
+
     def compute_distances(self):
         for src_bid in range(len(self.beacons)):
             for dst_bid in range(len(self.beacons)):
@@ -110,7 +113,7 @@ class Scanner:
                             return moved
 
 
-def run(lines: list[str]) -> int:
+def run(lines: list[str]) -> tuple[int, int]:
     sid = 0
     scanner: Optional[Scanner] = None
     scanners: list[Scanner] = []
@@ -146,10 +149,20 @@ def run(lines: list[str]) -> int:
                 break
         if not found_any:
             raise Exception('None of the candidates were matched')
-    res: set[Pos] = set()
+    beacon_count: set[Pos] = set()
     for s in matched:
-        res.update(s.beacons)
-    return len(res)
+        beacon_count.update(s.beacons)
+    max_dist = 0
+    matched_scanners = list(matched)
+    for i in range(len(matched_scanners)):
+        for j in range(len(matched_scanners)):
+            if i <= j:
+                continue
+            cur = matched_scanners[i].distance_to_scanner(matched_scanners[j])
+            if cur > max_dist:
+                max_dist = cur
+
+    return len(beacon_count), max_dist
 
 
 def main() -> None:
@@ -329,8 +342,9 @@ def test() -> None:
 891,-625,532
 -652,-548,-490
 30,-46,-14""".splitlines()
-    res = run(lines)
-    assert res == 79
+    cnt, dist = run(lines)
+    assert cnt == 79
+    assert dist == 3621
 
 
 if __name__ == "__main__":
