@@ -1,4 +1,7 @@
 # based on the beautiful idea here: https://www.reddit.com/r/adventofcode/comments/rlxhmg/comment/hqxczc4/
+from typing import Optional
+
+Cuboid = tuple[int, ...]
 
 def main() -> None:
     with open("i22.txt", "r") as i:
@@ -6,15 +9,28 @@ def main() -> None:
     res = run(lines)
     print(res)
 
+def find_intersection(cc: Cuboid, nc: Cuboid) -> Optional[Cuboid]:
+    if cc[2] < nc[1] or cc[4] < nc[3] or cc[6] < nc[4]
 
 def run(lines: list[str]) -> int:
-    cuboids: list[tuple[int, ...]] = []
+    cuboids: list[Cuboid] = []
     for line in lines:
         str_list = line.replace("x=", "").replace("y=", "").replace("z=", "").replace("..", ",").replace(
             "on ", "1,").replace("off ", "0,").split(",")
         int_list = [int(x) for x in str_list]
         cuboids.append(tuple(int_list))
-    return -1
+    core: list[Cuboid] = []
+    for cuboid in cuboids:
+        if cuboid[0]:
+            core.append(cuboid)
+        for in_core in core:
+            if intersect := find_intersection(in_core, cuboid):
+                core.append(intersect)
+    total = 0
+    for cuboid in core:
+        vol = cuboid[0] * (cuboid[2] - cuboid[1]) * (cuboid[4] - cuboid[3]) * (cuboid[6] - cuboid[5])
+        total += vol
+    return total
 
 
 def test() -> None:
