@@ -1,6 +1,6 @@
 # based on the beautiful idea here: https://www.reddit.com/r/adventofcode/comments/rlxhmg/comment/hqxczc4/
 from typing import Optional
-
+# on|off, min_x, max_x, min_y, max_y, min_z, max_z
 Cuboid = tuple[int, ...]
 
 def main() -> None:
@@ -10,7 +10,15 @@ def main() -> None:
     print(res)
 
 def find_intersection(cc: Cuboid, nc: Cuboid) -> Optional[Cuboid]:
-    if cc[2] < nc[1] or cc[4] < nc[3] or cc[6] < nc[4]
+    min_x = max(cc[1], nc[1])
+    max_x = min(cc[2], nc[2])
+    min_y = max(cc[3], nc[3])
+    max_y = min(cc[4], nc[4])
+    min_z = max(cc[5], nc[5])
+    max_z = min(cc[6], nc[6])
+    if min_x > max_x or min_y > max_y or min_z > max_z:
+        return None
+    return cc[0] * -1, min_x, max_x, min_y, max_y, min_z, max_z
 
 def run(lines: list[str]) -> int:
     cuboids: list[Cuboid] = []
@@ -21,14 +29,16 @@ def run(lines: list[str]) -> int:
         cuboids.append(tuple(int_list))
     core: list[Cuboid] = []
     for cuboid in cuboids:
+        to_add: list[Cuboid] = []
         if cuboid[0]:
-            core.append(cuboid)
+            to_add.append(cuboid)
         for in_core in core:
             if intersect := find_intersection(in_core, cuboid):
-                core.append(intersect)
+                to_add.append(intersect)
+        core += to_add
     total = 0
     for cuboid in core:
-        vol = cuboid[0] * (cuboid[2] - cuboid[1]) * (cuboid[4] - cuboid[3]) * (cuboid[6] - cuboid[5])
+        vol = cuboid[0] * (cuboid[2] - cuboid[1] + 1) * (cuboid[4] - cuboid[3] + 1) * (cuboid[6] - cuboid[5] + 1)
         total += vol
     return total
 
