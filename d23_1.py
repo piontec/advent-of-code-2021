@@ -1,7 +1,8 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cache
-from typing import Optional, Tuple
+from typing import Optional, Iterator
+import nographs as nog
 
 
 @dataclass
@@ -13,74 +14,55 @@ class Rooms:
     c: list[str]
     d: list[str]
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if type(other) is not Rooms:
             raise ValueError("wrong type")
         return self.a == other.a and self.b == other.b and self.c == other.c and self.d == other.d
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.a[0]) + hash(self.a[1]) + hash(self.b[0]) + hash(self.b[1]) + hash(self.c[0])\
                + hash(self.c[1]) + hash(self.d[0]) + hash(self.d[1])
 
 
 rooms_to_corridor_index = {"a": 2, "b": 4, "c": 6, "d": 8}
 step_cost = {"a": 1, "b": 10, "c": 100, "d": 1000}
-best_so_far = -1
 
 
 @dataclass
 class Burrow:
     corridor: list[str]
     rooms: Rooms
-    # tuple of (room_name, room_index
-    solved: list[Tuple[str, int]]
-    cost: int
+    last_move_cost: int
 
-    def __init__(self, corridor: Optional[list[str]], rooms: Rooms):
+    def __init__(self, corridor: Optional[list[str]], rooms: Rooms) -> None:
         if not corridor:
             self.corridor = ["." for _ in range(11)]
         else:
+            assert len(corridor) == 11
             self.corridor = corridor
         self.rooms = rooms
-        self.solved = []
-        self.update_solved()
-        self.cost = 0
+        self.last_move_cost = 0
 
     def copy(self) -> 'Burrow':
         res = Burrow(self.corridor.copy(),
                      Rooms(self.rooms.a.copy(), self.rooms.b.copy(), self.rooms.c.copy(), self.rooms.d.copy()))
         return res
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if type(other) is not Burrow:
             raise ValueError("wrong type")
         return self.corridor == other.corridor and self.rooms == other.rooms
 
-    def __hash__(self):
-        return hash(self.rooms) + hash(tuple(self.corridor)) + self.cost
+    def __hash__(self) -> int:
+        return hash(self.rooms) + hash(tuple(self.corridor)) + self.last_move_cost
 
-    def __str__(self):
-        print("#" * 13)
-        print("#" + "".join(self.corridor) + "#")
-        print(f"###{self.rooms.a[0]}#{self.rooms.b[0]}#{self.rooms.c[0]}#{self.rooms.d[0]}###")
-        print(f"  #{self.rooms.a[1]}#{self.rooms.b[1]}#{self.rooms.c[1]}#{self.rooms.d[1]}#")
-        print("  " + "#" * 9)
-
-    def update_solved(self) -> None:
-        self.solved = []
-        for name in ["a", "b", "c", "d"]:
-            if getattr(self.rooms, name)[1] == name:
-                info = (name, 1)
-                if info not in self.solved:
-                    self.solved.append(info)
-                if getattr(self.rooms, name)[0] == name:
-                    info = (name, 0)
-                    if info not in self.solved:
-                        self.solved.append(info)
-
-    @property
-    def all_solved(self) -> bool:
-        return len(self.solved) == 8
+    def __str__(self) -> str:
+        return "\n".join([
+            "#" * 13,
+            "#" + "".join(self.corridor) + "#",
+            f"###{self.rooms.a[0]}#{self.rooms.b[0]}#{self.rooms.c[0]}#{self.rooms.d[0]}###",
+            f"  #{self.rooms.a[1]}#{self.rooms.b[1]}#{self.rooms.c[1]}#{self.rooms.d[1]}#",
+            "  " + "#" * 9])
 
 
 @cache
@@ -97,12 +79,22 @@ def get_all_moves_from_corridor(burrow: Burrow) -> list[Burrow]:
         if not (room[1] == "." or (room[0] == "." and room[1] == amp)):
             continue
         room_index = 1 if room[1] == "." else 0
-
+        # if the corridor is blocked by another amp
+        dst_index = rooms_to_corridor_index[amp]
+        s, e = (i, dst_index) if i < dst_index else (dst_index, i)
+        blocked = False
+        for pos in range(s, e + 1):
+            if pos != i and burrow.corridor[pos] != ".":
+                blocked = True
+                break
+        if blocked:
+            continue
+        # compute burrow after move
         new_bur = deepcopy(burrow)
         new_bur.corridor[i] = "."
         getattr(new_bur.rooms, amp)[room_index] = amp
         steps = abs(rooms_to_corridor_index[amp] - i) + room_index + 1
-        new_bur.cost += steps * step_cost[amp]
+        new_bur.last_move_cost = steps * step_cost[amp]
         res.append(new_bur)
     return res
 
@@ -113,16 +105,16 @@ def get_all_moves_from_rooms(burrow: Burrow) -> list[Burrow]:
     for room_name in ["a", "b", "c", "d"]:
         for room_index in range(2):
             room = getattr(burrow.rooms, room_name)
-            # already solved
-            if (room_name, room_index) in burrow.solved:
-                continue
             # not an amp
             if room[room_index] == ".":
+                continue
+            # already OK
+            amp = room[room_index]
+            if room_name == amp and (room_index == 1 or (room_index == 0 and room[1] == amp)):
                 continue
             # blocked by amp at index 0 - can't leave
             if room_index == 1 and room[0] != ".":
                 continue
-            amp = room[room_index]
             possible_corridor_indexes = []
             # go left
             for ci in range(rooms_to_corridor_index[room_name] - 1, -1, -1):
@@ -143,31 +135,58 @@ def get_all_moves_from_rooms(burrow: Burrow) -> list[Burrow]:
                 new_bur.corridor[ci] = amp
                 getattr(new_bur.rooms, room_name)[room_index] = "."
                 steps = abs(rooms_to_corridor_index[room_name] - ci) + room_index + 1
-                new_bur.cost += steps * step_cost[amp]
+                new_bur.last_move_cost = steps * step_cost[amp]
                 res.append(new_bur)
     return res
 
 
-@cache
-def find_best_cost(step: int, burrow: Burrow) -> int:
-    global best_so_far
-    if burrow.cost > best_so_far > 0:
-        return -1
+def next_edges(burrow: Burrow, _) -> Iterator[tuple[Burrow, int]]:
+    for b in get_all_moves_from_rooms(burrow):
+        yield b, b.last_move_cost
+    for b in get_all_moves_from_corridor(burrow):
+        yield b, b.last_move_cost
 
-    burrow.update_solved()
-    if burrow.all_solved:
-        return burrow.cost
-
-    from_corridor = get_all_moves_from_corridor(burrow)
-    from_rooms = get_all_moves_from_rooms(burrow)
-
-    for b in from_rooms + from_corridor:
-        current_cost = find_best_cost(step + 1, b)
-        if current_cost == -1:
+def heuristic(burrow: Burrow) -> int:
+    res = 0
+    # from corridor
+    for i in range(len(burrow.corridor)):
+        if burrow.corridor[i] == ".":
             continue
-        if current_cost < best_so_far or best_so_far == -1:
-            best_so_far = current_cost
-    return best_so_far
+        amp = burrow.corridor[i]
+        room = getattr(burrow.rooms, amp)
+        room_index = 1 if room[1] == "." else 0
+        steps = abs(rooms_to_corridor_index[amp] - i) + room_index + 1
+        res += steps * step_cost[amp]
+    # from rooms
+    for room_name in ["a", "b", "c", "d"]:
+        for room_index in range(2):
+            room = getattr(burrow.rooms, room_name)
+            amp = room[room_index]
+            # not an amp
+            if amp == ".":
+                continue
+            steps = abs(rooms_to_corridor_index[room_name] - rooms_to_corridor_index[amp])
+            res += steps * step_cost[amp]
+    return res
+
+
+
+
+@cache
+def find_best_cost(burrow: Burrow) -> int:
+    goal = Burrow(None, Rooms(["a", "a"], ["b", "b"], ["c", "c"], ["d", "d"]))
+    traversal = nog.TraversalAStar(next_edges)
+    traversal.start_from(heuristic, burrow).go_to(goal)
+    return traversal.path_length
+
+def run(lines: list[str]) -> int:
+    row0 = lines[2].strip().split("#")
+    row1 = lines[3].strip().split("#")
+    rooms = Rooms([row0[3].lower(), row1[1].lower()], [row0[4].lower(), row1[2].lower()],
+                  [row0[5].lower(), row1[3].lower()], [row0[6].lower(), row1[4].lower()])
+    burrow = Burrow(None, rooms)
+
+    return find_best_cost(burrow)
 
 
 def main() -> None:
@@ -177,15 +196,6 @@ def main() -> None:
     print(res)
 
 
-def run(lines: list[str]) -> int:
-    row0 = lines[2].strip().split("#")
-    row1 = lines[3].strip().split("#")
-    rooms = Rooms([row0[3].lower(), row1[1].lower()], [row0[4].lower(), row1[2].lower()],
-                  [row0[5].lower(), row1[3].lower()], [row0[6].lower(), row1[4].lower()])
-    burrow = Burrow(None, rooms)
-
-    return find_best_cost(1, burrow)
-
 
 def test() -> None:
     txt = """#############
@@ -193,7 +203,8 @@ def test() -> None:
 ###B#C#B#D###
   #A#D#C#A#
   #########"""
-    assert run(txt.splitlines()) == 12521
+    res = run(txt.splitlines())
+    assert res == 12521
 
 
 if __name__ == "__main__":
